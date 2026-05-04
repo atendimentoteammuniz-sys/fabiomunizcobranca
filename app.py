@@ -3,109 +3,110 @@ import pandas as pd
 import urllib.parse
 from datetime import datetime
 
-# 1. ESTILO TEAM MUNIZ (DESIGN LIMPO E DIRETO)
-st.set_page_config(page_title="Team Muniz - Cobrança", layout="wide", page_icon="📲")
+# 1. ESTILO TEAM MUNIZ (INTERFACE DE AGENDA)
+st.set_page_config(page_title="Team Muniz - Agenda", layout="wide", page_icon="📅")
 
 st.markdown("""
     <style>
     .main { background-color: #000000; }
-    h1, h2, h3 { color: #D4AF37 !important; }
-    .card-aluno {
-        background-color: #111111;
-        padding: 10px 15px;
-        border-radius: 8px;
-        border-left: 4px solid #D4AF37;
-        margin-bottom: 5px;
-    }
-    .stLinkButton>a {
-        background-color: #D4AF37 !important;
-        color: black !important;
-        font-weight: bold !important;
-        border-radius: 4px !important;
-        height: 35px;
-        display: flex;
-        align-items: center;
+    h1, h2, h3 { color: #D4AF37 !important; text-align: center; }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 10px;
         justify-content: center;
     }
-    div[data-testid="stMetricValue"] { color: #D4AF37 !important; font-size: 24px !important; }
-    hr { border: 0.1px solid #333; }
+    .stTabs [data-baseweb="tab"] {
+        background-color: #111111;
+        border: 1px solid #333;
+        border-radius: 5px;
+        color: white;
+        padding: 10px 20px;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #D4AF37 !important;
+        color: black !important;
+        font-weight: bold;
+    }
+    .card-aluno {
+        background-color: #111111;
+        padding: 15px;
+        border-radius: 10px;
+        border: 1px solid #D4AF37;
+        margin-top: 10px;
+    }
+    .stLinkButton>a {
+        background-color: #25D366 !important; /* Verde WhatsApp */
+        color: white !important;
+        font-weight: bold !important;
+        width: 100%;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. PROCESSAMENTO DE DADOS
+# 2. CARREGAMENTO DOS DADOS
 def carregar_dados():
     try:
         url_base = st.secrets["LINK_PLANILHA"]
         url_csv = url_base.replace("/edit?usp=sharing", "/export?format=csv&gid=2123746860")
         df = pd.read_csv(url_csv)
         
-        # Ajuste de cabeçalhos conforme sua planilha
         if len(df.columns) >= 7:
             df.columns = ['aluno', 'whatsapp', 'valor', 'vencimento', 'status', 'pacote', 'chave_pix']
         
-        # Tratamento de data para ordenação
-        df['venc_dt'] = pd.to_datetime(df['vencimento'], dayfirst=True, errors='coerce')
-        return df.sort_values(by='venc_dt') # Organiza do mais antigo para o mais novo
-    except Exception as e:
-        st.error(f"Erro ao carregar: {e}")
+        # Filtra apenas Pendentes e limpa espaços
+        df = df[df['status'].str.lower().str.strip() == 'pendente']
+        # Garante que a coluna vencimento seja tratada como texto para os botões
+        df['vencimento'] = df['vencimento'].astype(str).str.strip()
+        return df
+    except:
         return None
 
 df = carregar_dados()
 
-if df is not None:
-    # --- RESUMO NO TOPO ---
-    hoje = datetime.now().date()
-    pendentes_total = df[df['status'].str.lower().str.strip() == 'pendente']
-    vencem_hoje = pendentes_total[pendentes_total['venc_dt'].dt.date == hoje]
-    
-    st.title("🏆 LISTA DE COBRANÇA")
-    
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Vencem Hoje", len(vencem_hoje))
-    m2.metric("Total Pendentes", len(pendentes_total))
-    
-    # Cálculo rápido de valor total pendente
-    try:
-        total_valor = pendentes_total['valor'].str.replace('R$ ', '').str.replace('.', '').str.replace(',', '.').astype(float).sum()
-        m3.metric("Total R$", f"R$ {total_valor:,.2f}")
-    except:
-        m3.metric("Total R$", "---")
-    
-    st.markdown("---")
+st.title("📅 AGENDA DE COBRANÇA")
+st.markdown("---")
 
-    # --- LISTA ÚNICA ---
-    if pendentes_total.empty:
-        st.success("✅ Nenhum aluno pendente na lista!")
-    else:
-        for _, row in pendentes_total.iterrows():
-            # Define se é destaque (vence hoje)
-            eh_hoje = "⭐ " if row['venc_dt'].date() == hoje else ""
+if df is not None and not df.empty:
+    # Obtém todas as datas únicas de vencimento para criar os botões (Tabs)
+    # Ordenadas cronologicamente
+    datas_disponiveis = sorted(df['vencimento'].unique())
+    
+    # Cria os botões de data no topo
+    tabs = st.tabs(datas_disponiveis)
+    
+    for i, data in enumerate(datas_disponiveis):
+        with tabs[i]:
+            st.subheader(f"Vencimentos em {data}")
             
-            with st.container():
-                col_info, col_btn = st.columns([4, 1])
-                
-                with col_info:
-                    # Layout compacto: Nome | Vencimento | Valor
+            # Filtra alunos desta data específica
+            alunos_do_dia = df[df['vencimento'] == data]
+            
+            for _, row in alunos_do_dia.iterrows():
+                with st.expander(f"👤 {row['aluno']} - {row['valor']}", expanded=False):
                     st.markdown(f"""
                     <div class="card-aluno">
-                        <span style="color:white; font-weight:bold;">{eh_hoje}{row['aluno']}</span><br>
-                        <span style="color:gray; font-size:14px;">Venc: {row['vencimento']} | {row['pacote']} | </span>
-                        <span style="color:#D4AF37; font-size:14px;"><b>{row['valor']}</b></span>
+                        <p><b>Plano:</b> {row['pacote']}</p>
+                        <p><b>WhatsApp:</b> {row['whatsapp']}</p>
+                        <p><b>Chave Pix:</b> {row['chave_pix']}</p>
                     </div>
                     """, unsafe_allow_html=True)
-                
-                with col_btn:
+                    
+                    # Preparação da mensagem
                     primeiro_nome = str(row['aluno']).split()[0]
                     msg = (
                         f"Fala, {primeiro_nome}! 🏆\n\n"
                         f"Aqui é o Fábio da *Team Muniz*.\n"
-                        f"O plano *{row['pacote']}* ({row['vencimento']}) está pendente.\n\n"
+                        f"Passando para avisar que o seu plano *{row['pacote']}* venceu no dia {data}.\n\n"
                         f"Pix: *{row['chave_pix']}*\n\n"
-                        "Me envia o comprovante? 🔥"
+                        "Me envia o comprovante para eu atualizar aqui? 🔥"
                     )
                     link_wpp = f"https://wa.me/{row['whatsapp']}?text={urllib.parse.quote(msg)}"
-                    st.write("") # Alinhamento vertical
-                    st.link_button(f"📲 Cobrar", link_wpp)
+                    
+                    st.write("")
+                    st.link_button(f"📲 Chamar {primeiro_nome} no WhatsApp", link_wpp)
 
 else:
-    st.info("💡 Verifique se a planilha está configurada corretamente.")
+    st.success("✅ Nenhuma cobrança pendente encontrada!")
+    st.balloons()
+
+st.markdown("---")
+st.markdown("<p style='text-align: center; color: #D4AF37;'>Sem estratégia, esforço vira tentativa.</p>", unsafe_allow_html=True)
