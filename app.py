@@ -37,7 +37,8 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 2. CARREGAMENTO COM FILTRO DE SEGURANÇA
+# 2. CARREGAMENTO COM LIMPEZA DE CACHE (ttl=0 força a atualização)
+@st.cache_data(ttl=0) 
 def carregar_dados():
     try:
         url_base = st.secrets["LINK_PLANILHA"]
@@ -48,7 +49,7 @@ def carregar_dados():
         if len(df.columns) >= 7:
             df.columns = ['aluno', 'whatsapp', 'valor', 'vencimento', 'status', 'pacote', 'chave_pix']
         
-        # REGRA DE OURO: Só aparecem os 'Pendente'. Se mudar para 'Pago', ele some.
+        # Filtra apenas quem é EXATAMENTE 'Pendente'
         df = df[df['status'].str.lower().str.strip() == 'pendente']
         
         df['vencimento'] = df['vencimento'].astype(str).str.strip()
@@ -56,12 +57,16 @@ def carregar_dados():
     except:
         return None
 
+# Botão manual para forçar atualização se necessário
+if st.button("🔄 Atualizar Lista"):
+    st.cache_data.clear()
+    st.rerun()
+
 df = carregar_dados()
 
 st.title("📅 AGENDA DE COBRANÇA")
 
 if df is not None and not df.empty:
-    # Cria os botões apenas para as datas que possuem pendências
     datas_pendentes = sorted(df['vencimento'].unique())
     tabs = st.tabs(datas_pendentes)
     
@@ -70,17 +75,15 @@ if df is not None and not df.empty:
             alunos_do_dia = df[df['vencimento'] == data]
             
             for _, row in alunos_do_dia.iterrows():
-                # Abre o detalhe ao clicar no aluno
                 with st.expander(f"👤 {row['aluno']} | {row['valor']}", expanded=False):
                     st.markdown(f"""
                     <div class="card-aluno">
                         <p><b>Pacote:</b> {row['pacote']}</p>
-                        <p><b>Status Atual:</b> ⚠️ PENDENTE</p>
+                        <p><b>Status:</b> ⚠️ PENDENTE</p>
                         <p><b>Chave Pix:</b> {row['chave_pix']}</p>
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # Mensagem com tom formal MFIT
                     msg_formal = (
                         f"*Mensagem automática MFIT | Team Muniz*\n\n"
                         f"Seu pagamento com vencimento em *{data}*, no valor de *{row['valor']}*, encontra-se pendente.\n\n"
@@ -93,7 +96,7 @@ if df is not None and not df.empty:
                     st.link_button(f"🚀 ENVIAR COBRANÇA FORMAL", link_wpp)
 else:
     st.balloons()
-    st.success("✅ Tudo regularizado! Nenhum aluno pendente para cobrança.")
+    st.success("✅ Tudo regularizado! Nenhum aluno pendente.")
 
 st.markdown("---")
 st.markdown("<p style='text-align: center; color: #D4AF37;'>Sem estratégia, esforço vira tentativa.</p>", unsafe_allow_html=True)
