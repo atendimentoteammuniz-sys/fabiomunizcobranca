@@ -34,8 +34,8 @@ st.markdown("""
         margin-top: 10px;
     }
     .stLinkButton>a {
-        background-color: #25D366 !important; /* Verde WhatsApp */
-        color: white !important;
+        background-color: #D4AF37 !important;
+        color: black !important;
         font-weight: bold !important;
         width: 100%;
     }
@@ -54,7 +54,6 @@ def carregar_dados():
         
         # Filtra apenas Pendentes e limpa espaços
         df = df[df['status'].str.lower().str.strip() == 'pendente']
-        # Garante que a coluna vencimento seja tratada como texto para os botões
         df['vencimento'] = df['vencimento'].astype(str).str.strip()
         return df
     except:
@@ -66,47 +65,41 @@ st.title("📅 AGENDA DE COBRANÇA")
 st.markdown("---")
 
 if df is not None and not df.empty:
-    # Obtém todas as datas únicas de vencimento para criar os botões (Tabs)
-    # Ordenadas cronologicamente
+    # Datas únicas para os botões
     datas_disponiveis = sorted(df['vencimento'].unique())
-    
-    # Cria os botões de data no topo
     tabs = st.tabs(datas_disponiveis)
     
     for i, data in enumerate(datas_disponiveis):
         with tabs[i]:
             st.subheader(f"Vencimentos em {data}")
-            
-            # Filtra alunos desta data específica
             alunos_do_dia = df[df['vencimento'] == data]
             
             for _, row in alunos_do_dia.iterrows():
-                with st.expander(f"👤 {row['aluno']} - {row['valor']}", expanded=False):
+                # Ao clicar no nome (vencimento), abre os detalhes do aluno
+                with st.expander(f"👤 {row['aluno']} | {row['valor']}", expanded=False):
                     st.markdown(f"""
                     <div class="card-aluno">
-                        <p><b>Plano:</b> {row['pacote']}</p>
-                        <p><b>WhatsApp:</b> {row['whatsapp']}</p>
+                        <p><b>Pacote:</b> {row['pacote']}</p>
+                        <p><b>Valor:</b> {row['valor']}</p>
                         <p><b>Chave Pix:</b> {row['chave_pix']}</p>
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # Preparação da mensagem
-                    primeiro_nome = str(row['aluno']).split()[0]
-                    msg = (
-                        f"Fala, {primeiro_nome}! 🏆\n\n"
-                        f"Aqui é o Fábio da *Team Muniz*.\n"
-                        f"Passando para avisar que o seu plano *{row['pacote']}* venceu no dia {data}.\n\n"
-                        f"Pix: *{row['chave_pix']}*\n\n"
-                        "Me envia o comprovante para eu atualizar aqui? 🔥"
+                    # MENSAGEM COM O TOM SOLICITADO
+                    msg_formal = (
+                        f"*Mensagem automática MFIT | Team Muniz*\n\n"
+                        f"Seu pagamento com vencimento em *{data}*, no valor de *{row['valor']}*, encontra-se pendente.\n\n"
+                        f"Para continuidade do seu acompanhamento e acesso à sua estratégia personalizada, é necessária a regularização.\n\n"
+                        f"Chave Pix: *{row['chave_pix']}*"
                     )
-                    link_wpp = f"https://wa.me/{row['whatsapp']}?text={urllib.parse.quote(msg)}"
+                    
+                    link_wpp = f"https://wa.me/{row['whatsapp']}?text={urllib.parse.quote(msg_formal)}"
                     
                     st.write("")
-                    st.link_button(f"📲 Chamar {primeiro_nome} no WhatsApp", link_wpp)
+                    st.link_button(f"🚀 ENVIAR COBRANÇA FORMAL", link_wpp)
 
 else:
-    st.success("✅ Nenhuma cobrança pendente encontrada!")
-    st.balloons()
+    st.success("✅ Nenhuma cobrança pendente!")
 
 st.markdown("---")
 st.markdown("<p style='text-align: center; color: #D4AF37;'>Sem estratégia, esforço vira tentativa.</p>", unsafe_allow_html=True)
