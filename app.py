@@ -1,88 +1,98 @@
 import streamlit as st
 import pandas as pd
 import urllib.parse
+from datetime import datetime
 
-# 1. ESTILO TEAM MUNIZ
-st.set_page_config(page_title="Team Muniz - Cobrança", layout="centered", page_icon="📲")
+# 1. ESTILO TEAM MUNIZ (FOCO EM PERFORMANCE)
+st.set_page_config(page_title="Team Muniz - Cobrança", layout="wide", page_icon="📲")
 
 st.markdown("""
     <style>
     .main { background-color: #000000; }
-    h1 { color: #D4AF37; text-align: center; }
+    h1, h2, h3 { color: #D4AF37 !important; }
     .card-aluno {
         background-color: #111111;
-        padding: 20px;
-        border: 1px solid #D4AF37;
-        border-radius: 12px;
-        margin-bottom: 15px;
+        padding: 15px;
+        border-radius: 10px;
+        border: 1px solid #333;
+        margin-bottom: 10px;
     }
     .stLinkButton>a {
-        width: 100% !important;
         background-color: #D4AF37 !important;
         color: black !important;
         font-weight: bold !important;
-        height: 45px;
-        border-radius: 8px;
+        border-radius: 5px !important;
+        width: 100%;
     }
+    div[data-testid="stMetricValue"] { color: #D4AF37 !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. CARREGAMENTO COM AJUSTE DE CABEÇALHO
+# 2. CARREGAMENTO E TRATAMENTO DOS DADOS
 def carregar_dados():
     try:
         url_base = st.secrets["LINK_PLANILHA"]
-        # Forçando a leitura da aba correta
         url_csv = url_base.replace("/edit?usp=sharing", "/export?format=csv&gid=2123746860")
         df = pd.read_csv(url_csv)
         
-        # Se os cabeçalhos estiverem grudados, tentamos renomear manualmente as colunas por posição
+        # Ajuste de colunas baseado no seu envio
         if len(df.columns) >= 7:
             df.columns = ['aluno', 'whatsapp', 'valor', 'vencimento', 'status', 'pacote', 'chave_pix']
+        
+        # Converte vencimento para data real para podermos filtrar
+        df['vencimento_dt'] = pd.to_datetime(df['vencimento'], dayfirst=True, errors='coerce')
         return df
     except Exception as e:
-        st.error(f"Erro na conexão: {e}")
+        st.error(f"Erro: {e}")
         return None
-
-st.title("📲 CENTRAL DE COBRANÇA")
-st.markdown("<p style='text-align: center; color: gray;'>Gestão de Pendências - Team Muniz</p>", unsafe_allow_html=True)
 
 df = carregar_dados()
 
 if df is not None:
-    # Filtrar apenas quem está Pendente
-    pendentes = df[df['status'].str.lower().str.strip() == 'pendente']
+    # --- BARRA SUPERIOR (COBRANÇAS DO DIA) ---
+    hoje = datetime.now().date()
+    df_hoje = df[(df['vencimento_dt'].dt.date == hoje) & (df['status'].str.lower().str.strip() == 'pendente')]
     
-    if pendentes.empty:
-        st.success("✅ Nenhuma cobrança pendente identificada!")
-    else:
-        st.info(f"Fábio, você tem {len(pendentes)} alunos para cobrar hoje.")
-        
-        for _, row in pendentes.iterrows():
-            with st.container():
-                st.markdown(f"""
-                <div class="card-aluno">
-                    <span style="color:white; font-size:18px;">👤 <b>{row['aluno']}</b></span><br>
-                    <span style="color:#D4AF37;">💰 {row['valor']}</span> | 
-                    <span style="color:gray;">📅 Venc: {row['vencimento']}</span><br>
-                    <span style="color:gray;">📦 {row['pacote']}</span>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Mensagem com a sua estratégia e a chave Pix inclusa
-                primeiro_nome = str(row['aluno']).split()[0]
-                msg = (
-                    f"Fala, {primeiro_nome}! 🏆\n\n"
-                    f"Aqui é o Fábio da *Team Muniz*.\n"
-                    f"Passando para avisar que o seu plano *{row['pacote']}* ({row['vencimento']}) está pendente.\n\n"
-                    f"Se quiser agilizar, segue minha chave Pix: *{row['chave_pix']}*\n\n"
-                    "Após o pagamento, me envie o comprovante por aqui. 🔥"
-                )
-                
-                link_wpp = f"https://wa.me/{row['whatsapp']}?text={urllib.parse.quote(msg)}"
-                st.link_button(f"🚀 COBRAR {primeiro_nome.upper()}", link_wpp)
-                st.write("") 
-else:
-    st.info("Aguardando os dados da planilha...")
+    st.title("🏆 CENTRAL TEAM MUNIZ")
+    
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Pendentes Hoje", len(df_hoje))
+    c2.metric("Valor Hoje", f"R$ {df_hoje['valor'].str.replace('R$ ', '').str.replace(',', '.').astype(float).sum():.2f}" if not df_hoje.empty else "R$ 0,00")
+    c3.metric("Total Geral", len(df[df['status'].str.lower().str.strip() == 'pendente']))
+    
+    st.divider()
 
-st.markdown("---")
-st.markdown("<p style='text-align: center; color: #D4AF37;'>Sem estratégia, esforço vira tentativa.</p>", unsafe_allow_html=True)
+    # --- FILTRO POR DATA ---
+    col_f1, col_f2 = st.columns([1, 2])
+    with col_f1:
+        data_filtro = st.date_input("Filtrar por data de vencimento:", hoje)
+    
+    # --- LISTA DE ALUNOS ---
+    # Filtra os dados com base na data selecionada e status pendente
+    pendentes_filtrados = df[(df['vencimento_dt'].dt.date == data_filtro) & (df['status'].str.lower().str.strip() == 'pendente')]
+
+    if pendentes_filtrados.empty:
+        st.info(f"Nenhuma pendência para o dia {data_filtro.strftime('%d/%m/%Y')}")
+    else:
+        for _, row in pendentes_filtrados.iterrows():
+            with st.container():
+                # Layout: Nome e Info na esquerda, Botão na direita
+                col_info, col_btn = st.columns([3, 1])
+                
+                with col_info:
+                    st.markdown(f"**{row['aluno']}** | {row['pacote']} | <span style='color:#D4AF37;'>{row['valor']}</span>", unsafe_allow_html=True)
+                
+                with col_btn:
+                    primeiro_nome = str(row['aluno']).split()[0]
+                    msg = (
+                        f"Fala, {primeiro_nome}! 🏆\n\n"
+                        f"Aqui é o Fábio da *Team Muniz*.\n"
+                        f"O plano *{row['pacote']}* venceu dia {row['vencimento']}.\n\n"
+                        f"Chave Pix: *{row['chave_pix']}*\n"
+                        "Me envia o comprovante? 🔥"
+                    )
+                    link_wpp = f"https://wa.me/{row['whatsapp']}?text={urllib.parse.quote(msg)}"
+                    st.link_button(f"📲 Cobrar", link_wpp)
+                st.divider()
+else:
+    st.info("Conecte sua planilha para começar.")
