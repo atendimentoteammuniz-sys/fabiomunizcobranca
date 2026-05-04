@@ -3,7 +3,7 @@ import pandas as pd
 import urllib.parse
 from datetime import datetime
 
-# 1. ESTILO TEAM MUNIZ (FOCO EM PERFORMANCE)
+# 1. ESTILO TEAM MUNIZ (DESIGN LIMPO E DIRETO)
 st.set_page_config(page_title="Team Muniz - Cobrança", layout="wide", page_icon="📲")
 
 st.markdown("""
@@ -12,87 +12,100 @@ st.markdown("""
     h1, h2, h3 { color: #D4AF37 !important; }
     .card-aluno {
         background-color: #111111;
-        padding: 15px;
-        border-radius: 10px;
-        border: 1px solid #333;
-        margin-bottom: 10px;
+        padding: 10px 15px;
+        border-radius: 8px;
+        border-left: 4px solid #D4AF37;
+        margin-bottom: 5px;
     }
     .stLinkButton>a {
         background-color: #D4AF37 !important;
         color: black !important;
         font-weight: bold !important;
-        border-radius: 5px !important;
-        width: 100%;
+        border-radius: 4px !important;
+        height: 35px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
-    div[data-testid="stMetricValue"] { color: #D4AF37 !important; }
+    div[data-testid="stMetricValue"] { color: #D4AF37 !important; font-size: 24px !important; }
+    hr { border: 0.1px solid #333; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. CARREGAMENTO E TRATAMENTO DOS DADOS
+# 2. PROCESSAMENTO DE DADOS
 def carregar_dados():
     try:
         url_base = st.secrets["LINK_PLANILHA"]
         url_csv = url_base.replace("/edit?usp=sharing", "/export?format=csv&gid=2123746860")
         df = pd.read_csv(url_csv)
         
-        # Ajuste de colunas baseado no seu envio
+        # Ajuste de cabeçalhos conforme sua planilha
         if len(df.columns) >= 7:
             df.columns = ['aluno', 'whatsapp', 'valor', 'vencimento', 'status', 'pacote', 'chave_pix']
         
-        # Converte vencimento para data real para podermos filtrar
-        df['vencimento_dt'] = pd.to_datetime(df['vencimento'], dayfirst=True, errors='coerce')
-        return df
+        # Tratamento de data para ordenação
+        df['venc_dt'] = pd.to_datetime(df['vencimento'], dayfirst=True, errors='coerce')
+        return df.sort_values(by='venc_dt') # Organiza do mais antigo para o mais novo
     except Exception as e:
-        st.error(f"Erro: {e}")
+        st.error(f"Erro ao carregar: {e}")
         return None
 
 df = carregar_dados()
 
 if df is not None:
-    # --- BARRA SUPERIOR (COBRANÇAS DO DIA) ---
+    # --- RESUMO NO TOPO ---
     hoje = datetime.now().date()
-    df_hoje = df[(df['vencimento_dt'].dt.date == hoje) & (df['status'].str.lower().str.strip() == 'pendente')]
+    pendentes_total = df[df['status'].str.lower().str.strip() == 'pendente']
+    vencem_hoje = pendentes_total[pendentes_total['venc_dt'].dt.date == hoje]
     
-    st.title("🏆 CENTRAL TEAM MUNIZ")
+    st.title("🏆 LISTA DE COBRANÇA")
     
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Pendentes Hoje", len(df_hoje))
-    c2.metric("Valor Hoje", f"R$ {df_hoje['valor'].str.replace('R$ ', '').str.replace(',', '.').astype(float).sum():.2f}" if not df_hoje.empty else "R$ 0,00")
-    c3.metric("Total Geral", len(df[df['status'].str.lower().str.strip() == 'pendente']))
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Vencem Hoje", len(vencem_hoje))
+    m2.metric("Total Pendentes", len(pendentes_total))
     
-    st.divider()
+    # Cálculo rápido de valor total pendente
+    try:
+        total_valor = pendentes_total['valor'].str.replace('R$ ', '').str.replace('.', '').str.replace(',', '.').astype(float).sum()
+        m3.metric("Total R$", f"R$ {total_valor:,.2f}")
+    except:
+        m3.metric("Total R$", "---")
+    
+    st.markdown("---")
 
-    # --- FILTRO POR DATA ---
-    col_f1, col_f2 = st.columns([1, 2])
-    with col_f1:
-        data_filtro = st.date_input("Filtrar por data de vencimento:", hoje)
-    
-    # --- LISTA DE ALUNOS ---
-    # Filtra os dados com base na data selecionada e status pendente
-    pendentes_filtrados = df[(df['vencimento_dt'].dt.date == data_filtro) & (df['status'].str.lower().str.strip() == 'pendente')]
-
-    if pendentes_filtrados.empty:
-        st.info(f"Nenhuma pendência para o dia {data_filtro.strftime('%d/%m/%Y')}")
+    # --- LISTA ÚNICA ---
+    if pendentes_total.empty:
+        st.success("✅ Nenhum aluno pendente na lista!")
     else:
-        for _, row in pendentes_filtrados.iterrows():
+        for _, row in pendentes_total.iterrows():
+            # Define se é destaque (vence hoje)
+            eh_hoje = "⭐ " if row['venc_dt'].date() == hoje else ""
+            
             with st.container():
-                # Layout: Nome e Info na esquerda, Botão na direita
-                col_info, col_btn = st.columns([3, 1])
+                col_info, col_btn = st.columns([4, 1])
                 
                 with col_info:
-                    st.markdown(f"**{row['aluno']}** | {row['pacote']} | <span style='color:#D4AF37;'>{row['valor']}</span>", unsafe_allow_html=True)
+                    # Layout compacto: Nome | Vencimento | Valor
+                    st.markdown(f"""
+                    <div class="card-aluno">
+                        <span style="color:white; font-weight:bold;">{eh_hoje}{row['aluno']}</span><br>
+                        <span style="color:gray; font-size:14px;">Venc: {row['vencimento']} | {row['pacote']} | </span>
+                        <span style="color:#D4AF37; font-size:14px;"><b>{row['valor']}</b></span>
+                    </div>
+                    """, unsafe_allow_html=True)
                 
                 with col_btn:
                     primeiro_nome = str(row['aluno']).split()[0]
                     msg = (
                         f"Fala, {primeiro_nome}! 🏆\n\n"
                         f"Aqui é o Fábio da *Team Muniz*.\n"
-                        f"O plano *{row['pacote']}* venceu dia {row['vencimento']}.\n\n"
-                        f"Chave Pix: *{row['chave_pix']}*\n"
+                        f"O plano *{row['pacote']}* ({row['vencimento']}) está pendente.\n\n"
+                        f"Pix: *{row['chave_pix']}*\n\n"
                         "Me envia o comprovante? 🔥"
                     )
                     link_wpp = f"https://wa.me/{row['whatsapp']}?text={urllib.parse.quote(msg)}"
+                    st.write("") # Alinhamento vertical
                     st.link_button(f"📲 Cobrar", link_wpp)
-                st.divider()
+
 else:
-    st.info("Conecte sua planilha para começar.")
+    st.info("💡 Verifique se a planilha está configurada corretamente.")
